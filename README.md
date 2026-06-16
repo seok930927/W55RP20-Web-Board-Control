@@ -12,6 +12,9 @@ companion app**.
 > [Certificate](#certificate).
 
 ---
+<img width="483" height="274" alt="image" src="https://github.com/user-attachments/assets/6fec62bc-33aa-4583-b8c6-a043c5d2f5ab" />
+
+<img width="1699" height="878" alt="image" src="https://github.com/user-attachments/assets/3b72e12b-286f-4fad-b48d-ec3bb6638e38" />
 
 ## Features
 
