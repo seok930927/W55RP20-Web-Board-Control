@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>W55RP20 Board Control</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:'Segoe UI',sans-serif;margin:0;background:#f4f6f8;color:#222}
+header{background:#0055aa;color:#fff;padding:10px 20px;display:flex;justify-content:space-between;align-items:center}
+header h1{font-size:1.1em;margin:0}
+header a{color:#cde3ff;text-decoration:none;margin-left:14px;font-size:.9em}
+.wrap{display:flex;flex-wrap:wrap;gap:16px;padding:16px;max-width:1340px;margin:0 auto}
+.boardbox{flex:1 1 640px;min-width:340px}
+.panel{flex:1 1 320px;min-width:300px}
+.card{background:#fff;border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.card h3{margin:0 0 10px;font-size:1em;color:#0055aa;border-bottom:1px solid #eee;padding-bottom:6px}
+svg{width:100%;height:auto;user-select:none}
+.modebtn{display:inline-block;padding:7px 12px;margin:3px;border:1px solid #bbb;border-radius:5px;background:#fff;cursor:pointer;font-size:.85em}
+.modebtn.cur{background:#0055aa;color:#fff;border-color:#0055aa}
+.bigbtn{padding:10px 30px;border:none;border-radius:6px;color:#fff;font-size:1em;cursor:pointer;margin:4px}
+.hi{background:#118811}.lo{background:#777}.blue{background:#0055aa}
+input[type=text],input[type=number],select{padding:7px;border:1px solid #ccc;border-radius:4px;margin:2px;font-size:.9em}
+input[type=range]{width:100%}
+.statebig{font-size:1.5em;font-weight:bold;margin:8px 0}
+.muted{color:#888;font-size:.85em}
+.chip{display:inline-block;background:#e3f0fb;border:1px solid #9cc4e8;border-radius:12px;padding:3px 10px;margin:3px;font-size:.85em}
+.bar{height:14px;background:#eee;border-radius:7px;overflow:hidden;margin-top:6px}
+.bar>div{height:100%;background:#9c27b0;width:0%}
+.res{font-family:Consolas,monospace;background:#f2f2f2;border-radius:4px;padding:8px;margin-top:8px;min-height:1.4em;word-break:break-all;font-size:.9em}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 22px;border-radius:6px;opacity:0;transition:opacity .3s;pointer-events:none;font-size:.9em}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:10px;border:1px solid #ccc;border-radius:6px;padding:8px 12px}
+.legend span{display:inline-flex;align-items:center;font-size:.78em}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:5px;border:1px solid rgba(0,0,0,.15)}
+.rowflex{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<header>
+  <h1>W55RP20 Remote Board Control</h1>
+  <nav><a href="/account">Settings</a><a href="/logout">Logout</a></nav>
+</header>
+
+<div class="wrap">
+  <div class="boardbox">
+    <div class="card">
+      <h3>W55RP20-EVB-Pico PIN MAP (click a pin)</h3>
+      <svg id="board" viewBox="0 0 830 645"></svg>
+      <div class="legend">
+        <span><i style="background:#e53935"></i>Power</span>
+        <span><i style="background:#111"></i>Ground</span>
+        <span><i style="background:#4a148c"></i>UART (default)</span>
+        <span><i style="background:#b39ddb"></i>UART</span>
+        <span><i style="background:#76c043"></i>GPIO, PIO, PWM</span>
+        <span><i style="background:#2e7d32"></i>ADC</span>
+        <span><i style="background:#ec5f94"></i>SPI</span>
+        <span><i style="background:#90caf9"></i>I2C</span>
+        <span><i style="background:#f4bdc8"></i>System Control</span>
+        <span><i style="background:#fb8c00"></i>Debugging</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="card" id="pincard">
+      <h3 id="pintitle">Select a pin</h3>
+      <div id="pinbody"><p class="muted">Click a GP box on the pin map to open its configuration menu.</p></div>
+    </div>
+
+    <div class="card" id="i2ccard">
+      <h3>I2C Utility</h3>
+      <p class="muted">I2C0: SDA=GP0/4/8/12, SCL=GP1/5/9/13 &nbsp;|&nbsp; I2C1: SDA=GP2/6/10/14/26, SCL=GP3/7/11/15/27<br>
+      Enabled when both SDA and SCL of a bus are configured. (100kHz)</p>
+      <div class="rowflex">
+        Bus: <select id="i2cbus"><option value="0">I2C0</option><option value="1">I2C1</option></select>
+        <button class="bigbtn blue" id="i2cscan" disabled>Scan</button>
+      </div>
+      <div id="i2cfound"></div>
+      <div class="rowflex" style="margin-top:8px">
+        Addr 0x<input type="text" id="i2caddr" size="3" placeholder="3C">
+        Reg 0x<input type="text" id="i2creg" size="3" value="00">
+        Len <input type="number" id="i2clen" min="1" max="16" value="1" style="width:60px">
+        <button class="bigbtn blue" id="i2cread" disabled>Read</button>
+      </div>
+      <div class="rowflex">
+        Write data (hex) <input type="text" id="i2cdata" size="20" placeholder="A1B2">
+        <button class="bigbtn blue" id="i2cwrite" disabled>Write</button>
+      </div>
+      <div class="res" id="i2cres"></div>
+    </div>
+
+    <div class="card" id="spicard">
+      <h3>SPI0 Utility</h3>
+      <p class="muted">SCK=GP2/6, TX(MOSI)=GP3/7, RX(MISO)=GP0/4, CS=GP1/5 (optional) — enabled when SCK·TX·RX are configured (1MHz, Mode 0)</p>
+      <div class="rowflex">
+        TX (hex) <input type="text" id="spidata" size="24" placeholder="9F0000">
+        <button class="bigbtn blue" id="spixfer" disabled>Transfer</button>
+      </div>
+      <div class="res" id="spires"></div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/*  ---------- 핀 정의 (공식 W55RP20-EVB-Pico 핀아웃 기준) ---------- */
+var COL = {pwr:'#e53935', gnd:'#111', ud:'#4a148c', u:'#b39ddb', gpio:'#76c043',
+           adc:'#2e7d32', spi:'#ec5f94', i2c:'#90caf9', sys:'#f4bdc8', dbg:'#fb8c00'};
+var DARKTXT = {u:1, i2c:1, sys:1, gpio:1};   /* 밝은 배경 → 검은 글씨 */
+
+/*  왼쪽 물리핀 1~20 (위→아래), 오른쪽 40~21 (위→아래)
+    b: 기능 배지 [텍스트, 색상키] — GP 박스에서 바깥쪽 순서 */
+var L = [
+ {p:1,  gp:0,  b:[['UART0 TX','ud'],['I2C0 SDA','i2c'],['SPI0 RX','spi']]},
+ {p:2,  gp:1,  b:[['UART0 RX','ud'],['I2C0 SCL','i2c'],['SPI0 CSn','spi']]},
+ {p:3,  t:'GND', k:'gnd'},
+ {p:4,  gp:2,  b:[['I2C1 SDA','i2c'],['SPI0 SCK','spi']]},
+ {p:5,  gp:3,  b:[['I2C1 SCL','i2c'],['SPI0 TX','spi']]},
+ {p:6,  gp:4,  b:[['UART1 TX','u'],['I2C0 SDA','i2c'],['SPI0 RX','spi']]},
+ {p:7,  gp:5,  b:[['UART1 RX','u'],['I2C0 SCL','i2c'],['SPI0 CSn','spi']]},
+ {p:8,  t:'GND', k:'gnd'},
+ {p:9,  gp:6,  b:[['I2C1 SDA','i2c'],['SPI0 SCK','spi']]},
+ {p:10, gp:7,  b:[['I2C1 SCL','i2c'],['SPI0 TX','spi']]},
+ {p:11, gp:8,  b:[['UART1 TX','u'],['I2C0 SDA','i2c'],['SPI1 RX','spi']]},
+ {p:12, gp:9,  b:[['UART1 RX','u'],['I2C0 SCL','i2c'],['SPI1 CSn','spi']]},
+ {p:13, t:'GND', k:'gnd'},
+ {p:14, gp:10, b:[['I2C1 SDA','i2c'],['SPI1 SCK','spi']]},
+ {p:15, gp:11, b:[['I2C1 SCL','i2c'],['SPI1 TX','spi']]},
+ {p:16, gp:12, b:[['UART0 TX','u'],['I2C0 SDA','i2c'],['SPI1 RX','spi']]},
+ {p:17, gp:13, b:[['UART0 RX','u'],['I2C0 SCL','i2c'],['SPI1 CSn','spi']]},
+ {p:18, t:'GND', k:'gnd'},
+ {p:19, gp:14, b:[['I2C1 SDA','i2c'],['SPI1 SCK','spi']]},
+ {p:20, gp:15, b:[['I2C1 SCL','i2c'],['SPI1 TX','spi']]}
+];
+var R = [
+ {p:40, t:'VBUS', k:'pwr'},
+ {p:39, t:'VSYS', k:'pwr'},
+ {p:38, t:'GND', k:'gnd'},
+ {p:37, t:'3V3_EN', k:'sys'},
+ {p:36, t:'3V3', k:'pwr'},
+ {p:35, t:'ADC_VREF', k:'adc'},
+ {p:34, gp:28, b:[['ADC2','adc']]},
+ {p:33, t:'AGND', k:'gnd'},
+ {p:32, gp:27, b:[['ADC1','adc'],['I2C1 SCL','i2c']]},
+ {p:31, gp:26, b:[['ADC0','adc'],['I2C1 SDA','i2c']]},
+ {p:30, t:'RUN', k:'sys'},
+ {p:29},
+ {p:28, t:'GND', k:'gnd'},
+ {p:27},{p:26},{p:25},{p:24},
+ {p:23, t:'GND', k:'gnd'},
+ {p:22},{p:21}
+];
+
+/* 펌웨어에서 제어 가능한 핀과 지원 모드 */
+var CAPS = {0:['in','out','pwm','i2c0sda','spi0rx'],1:['in','out','pwm','i2c0scl','spi0cs'],
+            2:['in','out','pwm','i2c1sda','spi0sck'],3:['in','out','pwm','i2c1scl','spi0tx'],
+            4:['in','out','pwm','i2c0sda','spi0rx'],5:['in','out','pwm','i2c0scl','spi0cs'],
+            6:['in','out','pwm','i2c1sda','spi0sck'],7:['in','out','pwm','i2c1scl','spi0tx'],
+            8:['in','out','pwm','i2c0sda'],9:['in','out','pwm','i2c0scl'],
+            10:['in','out','pwm','i2c1sda'],11:['in','out','pwm','i2c1scl'],
+            12:['in','out','pwm','i2c0sda'],13:['in','out','pwm','i2c0scl'],
+            14:['in','out','pwm','i2c1sda'],15:['in','out','pwm','i2c1scl'],
+            26:['in','out','pwm','adc','i2c1sda'],27:['in','out','pwm','adc','i2c1scl'],
+            28:['in','out','pwm','adc']};
+/* 예약 핀 없음 — S2E 전용 핀 기능은 펌웨어에서 제거됨 */
+var RSV = {};
+
+var MLABEL = {dis:'Disabled',in:'Input',out:'Output',pwm:'PWM',adc:'ADC',
+              i2c0sda:'I2C0 SDA',i2c0scl:'I2C0 SCL',i2c1sda:'I2C1 SDA',i2c1scl:'I2C1 SCL',
+              spi0rx:'SPI0 RX',spi0cs:'SPI0 CS',spi0sck:'SPI0 SCK',spi0tx:'SPI0 TX'};
+var MCOLOR = {in:'#2196f3',out:'#118811',pwm:'#ff9800',adc:'#9c27b0',
+              i2c0sda:'#00897b',i2c0scl:'#00897b',i2c1sda:'#00897b',i2c1scl:'#00897b',
+              spi0rx:'#e91e63',spi0cs:'#e91e63',spi0sck:'#e91e63',spi0tx:'#e91e63'};
+
+/*  ---------- 레이아웃 ---------- */
+var BX = 310, BW = 300;            /* 보드 위치/폭 */
+var ROW0 = 55, ROWH = 26;
+var PAD_L = BX + 17, PAD_R = BX + BW - 17;
+var NUM_L = BX - 7, NUM_R = BX + BW + 7;     /* 핀 번호 */
+var BOX_L = BX - 26, BOX_R = BX + BW + 26;   /* 박스 체인 시작 */
+var GPW_L = 54, GPW_R = 64;        /* GP 박스 고정 폭 (값 표시 공간) */
+
+var S = {pins:{}, i2c0:0, i2c1:0, spi0:0};
+var sel = -1, busy = false, toastTimer = 0;
+
+function $(id){ return document.getElementById(id); }
+function toast(msg){
+  var t = $('toast'); t.textContent = msg; t.style.opacity = 1;
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.style.opacity = 0; }, 2500);
+}
+
+/*  ---------- 통신 ---------- */
+function api(path, params){
+  busy = true;
+  var opt = params ? {method:'POST', body:new URLSearchParams(params)} : {};
+  return fetch(path, opt).then(function(r){
+    if (r.status === 401){ location = '/login'; throw 0; }
+    return r.json();
+  }).catch(function(e){ if (e !== 0) toast('Communication error'); return null; })
+    .finally(function(){ busy = false; });
+}
+function applyState(st){
+  if (!st || !st.pins) return;
+  S.i2c0 = st.i2c0; S.i2c1 = st.i2c1; S.spi0 = st.spi0;
+  st.pins.forEach(function(p){ S.pins[p.gp] = p; });
+  paintBoard(); paintPanelValues(); paintBusButtons();
+}
+function setPin(params){
+  api('/api/pin', params).then(function(st){
+    if (st){ applyState(st); renderPanel(); }
+  });
+}
+
+/*  ---------- SVG ---------- */
+var SVGNS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, text){
+  var e = document.createElementNS(SVGNS, tag);
+  for (var k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  return e;
+}
+function textW(s){
+  var w = 11;
+  for (var i = 0; i < s.length; i++) w += s.charCodeAt(i) > 127 ? 9.5 : 5.6;
+  return Math.round(w);
+}
+function badge(g, x, y, w, label, bg, dark, dim){
+  g.appendChild(el('rect', {x:x, y:y-9, width:w, height:18, rx:3, fill:bg,
+                            opacity:dim ? 0.45 : 1, stroke:'rgba(0,0,0,.2)','stroke-width':0.5}));
+  g.appendChild(el('text', {x:x+w/2, y:y+3.5, 'text-anchor':'middle', 'font-size':9,
+                            fill:dark ? '#111' : '#fff', opacity:dim ? 0.8 : 1}, label));
+}
+
+function gradStops(node, stops){
+  stops.forEach(function(s){
+    node.appendChild(el('stop', {offset:s[0], 'stop-color':s[1]}));
+  });
+  return node;
+}
+function buildDefs(svg){
+  var d = el('defs', {});
+  d.appendChild(gradStops(el('linearGradient', {id:'gPCB', x1:0, y1:0, x2:1, y2:1}),
+    [['0%','#67ab50'],['45%','#4f8f3f'],['100%','#3d7331']]));
+  d.appendChild(gradStops(el('linearGradient', {id:'gUSB', x1:0, y1:0, x2:0, y2:1}),
+    [['0%','#e6def7'],['50%','#cdc1ec'],['100%','#a497cf']]));
+  d.appendChild(gradStops(el('radialGradient', {id:'gGold', cx:0.35, cy:0.35, r:0.9}),
+    [['0%','#fff3c4'],['45%','#ffd54f'],['100%','#a8742a']]));
+  d.appendChild(gradStops(el('linearGradient', {id:'gMetal', x1:0, y1:0, x2:0, y2:1}),
+    [['0%','#fafafa'],['45%','#cfd8dc'],['100%','#78909c']]));
+  d.appendChild(gradStops(el('linearGradient', {id:'gChip', x1:0, y1:0, x2:1, y2:1}),
+    [['0%','#3c3c3c'],['55%','#1c1c1c'],['100%','#0a0a0a']]));
+  var f = el('filter', {id:'fShadow', x:'-20%', y:'-20%', width:'140%', height:'140%'});
+  f.appendChild(el('feDropShadow', {dx:0, dy:4, stdDeviation:5, 'flood-color':'#000', 'flood-opacity':0.35}));
+  d.appendChild(f);
+  svg.appendChild(d);
+}
+function smd(svg, x, y, w, h, body){
+  /* 양끝 은색 단자가 있는 SMD 부품 */
+  svg.appendChild(el('rect', {x:x, y:y, width:w, height:h, rx:1, fill:body}));
+  svg.appendChild(el('rect', {x:x, y:y, width:w*0.22, height:h, fill:'#cfd8dc'}));
+  svg.appendChild(el('rect', {x:x+w*0.78, y:y, width:w*0.22, height:h, fill:'#cfd8dc'}));
+}
+function drawBoardBody(svg){
+  buildDefs(svg);
+  var cx = BX + BW/2;
+
+  /* PCB */
+  svg.appendChild(el('rect', {x:BX, y:15, width:BW, height:566, rx:14, fill:'url(#gPCB)', stroke:'#2e5b26', 'stroke-width':2, filter:'url(#fShadow)'}));
+
+  /* 배선(트레이스) 패턴 + 비아 */
+  var traces = [
+    'M '+(BX+44)+' 110 h 60 v 50 h 90', 'M '+(BX+60)+' 470 h 70 v -40 h 100',
+    'M '+(BX+BW-50)+' 130 v 60 h -60',  'M '+(BX+50)+' 330 v 60 h 50',
+    'M '+(BX+BW-46)+' 330 v 90 h -40',  'M '+(BX+90)+' 220 h 40 v 30'
+  ];
+  traces.forEach(function(t){
+    svg.appendChild(el('path', {d:t, fill:'none', stroke:'#3c6e30', 'stroke-width':1.6, opacity:0.8}));
+  });
+  [[BX+104,160],[BX+194,160],[BX+130,470],[BX+230,430],[BX+100,250],[BX+BW-110,190],
+   [BX+110,390],[BX+BW-86,420],[BX+150,110],[BX+170,500]].forEach(function(v){
+    svg.appendChild(el('circle', {cx:v[0], cy:v[1], r:1.8, fill:'url(#gGold)', opacity:0.9}));
+  });
+
+  /* 마운팅 홀 (금도금 링) */
+  [[BX+16,32],[BX+BW-16,32],[BX+16,564],[BX+BW-16,564]].forEach(function(m){
+    svg.appendChild(el('circle', {cx:m[0], cy:m[1], r:7, fill:'url(#gGold)', stroke:'#8d6e63'}));
+    svg.appendChild(el('circle', {cx:m[0], cy:m[1], r:3.6, fill:'#33342e'}));
+  });
+
+  /* 모서리 핀 번호 (흰색 실크) */
+  svg.appendChild(el('text', {x:BX+30, y:38,  'font-size':10, fill:'#fff', 'font-weight':'bold'}, '1'));
+  svg.appendChild(el('text', {x:BX+BW-42, y:38, 'font-size':10, fill:'#fff', 'font-weight':'bold'}, '40'));
+  svg.appendChild(el('text', {x:BX+28, y:560, 'font-size':10, fill:'#fff', 'font-weight':'bold'}, '20'));
+  svg.appendChild(el('text', {x:BX+BW-42, y:560, 'font-size':10, fill:'#fff', 'font-weight':'bold'}, '21'));
+
+  /* USB-C (라벤더) */
+  svg.appendChild(el('rect', {x:cx-36, y:2, width:72, height:44, rx:12, fill:'url(#gUSB)', stroke:'#8d80b8', 'stroke-width':1.5}));
+  svg.appendChild(el('rect', {x:cx-24, y:10, width:48, height:10, rx:5, fill:'#4a4458'}));
+  svg.appendChild(el('rect', {x:cx-30, y:34, width:60, height:4, rx:2, fill:'rgba(0,0,0,.15)'}));
+
+  /* BOOTSEL / RUN 버튼 (좌측, 세로 라벨) */
+  function button(y, label){
+    svg.appendChild(el('rect', {x:BX+44, y:y, width:26, height:22, rx:3, fill:'url(#gMetal)', stroke:'#78909c'}));
+    svg.appendChild(el('circle', {cx:BX+57, cy:y+11, r:7, fill:'#1c1c1c', stroke:'#000'}));
+    svg.appendChild(el('text', {x:BX+38, y:y+11, 'font-size':6.5, fill:'#fff', 'text-anchor':'middle',
+                                transform:'rotate(-90 '+(BX+38)+' '+(y+11)+')'}, label));
+  }
+  button(72, 'BOOTSEL');
+  button(112, 'RUN');
+
+  /* SWD 패드: 주황-검정-주황 (세로 글씨) */
+  var swd = [['SWCLK','#e07820','#fff'],['GND','#141414','#fff'],['SWDIO','#e07820','#fff']];
+  for (var i = 0; i < 3; i++){
+    var sx = cx-2+i*24;
+    svg.appendChild(el('rect', {x:sx, y:58, width:20, height:46, rx:2, fill:swd[i][1], stroke:'rgba(0,0,0,.4)'}));
+    svg.appendChild(el('text', {x:sx+10, y:81, 'text-anchor':'middle', 'font-size':7, fill:swd[i][2], 'font-weight':'bold',
+                                transform:'rotate(-90 '+(sx+10)+' 81)'}, swd[i][0]));
+    svg.appendChild(el('circle', {cx:sx+10, cy:112, r:3, fill:'url(#gGold)'}));
+  }
+
+  /* PWR LED (우측, 세로 라벨) */
+  svg.appendChild(el('circle', {cx:BX+BW-34, cy:84, r:7, fill:'#ff5252', opacity:0.3}));
+  svg.appendChild(el('rect', {x:BX+BW-38, y:81, width:8, height:6, rx:1, fill:'#ff5252', stroke:'rgba(0,0,0,.3)', 'stroke-width':0.5}));
+  svg.appendChild(el('text', {x:BX+BW-46, y:84, 'font-size':6.5, fill:'#fff', 'text-anchor':'middle',
+                              transform:'rotate(-90 '+(BX+BW-46)+' 84)'}, 'PWR'));
+
+  /* 흑색 헤더 소켓 2개 */
+  function headerSocket(y, holes){
+    var w = holes*12+10;
+    svg.appendChild(el('rect', {x:cx-w/2, y:y, width:w, height:20, rx:2, fill:'#1a1a1a', stroke:'#000'}));
+    for (var h = 0; h < holes; h++){
+      svg.appendChild(el('circle', {cx:cx-w/2+11+h*12, cy:y+10, r:2.6, fill:'#050505', stroke:'#3a3a3a'}));
+    }
+  }
+  headerSocket(168, 8);
+  headerSocket(452, 10);
+
+  /* 이더넷 상태 LED 열 (세로 배치 + 세로 라벨) */
+  ['ACT','DUP','SPD','LINK'].forEach(function(n, j){
+    var ly = 210+j*17;
+    svg.appendChild(el('rect', {x:BX+78, y:ly, width:9, height:5.5, rx:1, fill:'#d32f2f', stroke:'rgba(0,0,0,.35)', 'stroke-width':0.5}));
+    svg.appendChild(el('text', {x:BX+72, y:ly+3, 'font-size':5.5, fill:'#fff', 'text-anchor':'end'}, n));
+  });
+
+  /* 크리스탈(XTAL) + 소형 IC + SMD 부품 */
+  svg.appendChild(el('rect', {x:BX+BW-72, y:226, width:28, height:13, rx:6, fill:'url(#gMetal)', stroke:'#90a4ae'}));
+  svg.appendChild(el('text', {x:BX+BW-58, y:248, 'font-size':5.5, fill:'#fff', 'text-anchor':'middle'}, 'XTAL'));
+  svg.appendChild(el('rect', {x:BX+48, y:146, width:20, height:20, rx:2, fill:'url(#gChip)', stroke:'#000'}));
+  smd(svg, BX+120, 200, 14, 6, '#c62828');
+  smd(svg, BX+140, 212, 14, 6, '#c62828');
+  smd(svg, BX+120, 224, 14, 6, '#c62828');
+  smd(svg, BX+44, 392, 16, 7, '#455a64');
+  smd(svg, BX+BW-62, 388, 16, 7, '#6d4c41');
+  smd(svg, BX+70, 432, 16, 7, '#455a64');
+  smd(svg, BX+BW-88, 430, 16, 7, '#455a64');
+  smd(svg, BX+BW-60, 130, 16, 7, '#6d4c41');
+
+  /* 메인 칩 (QFN: 4변 금색 리드) */
+  var chX = cx-48, chY = 268, chW = 96;
+  for (var p = 0; p < 13; p++){
+    var off = 8 + p*6.5;
+    svg.appendChild(el('rect', {x:chX+off, y:chY-4,      width:3.5, height:5, fill:'url(#gGold)'}));
+    svg.appendChild(el('rect', {x:chX+off, y:chY+chW-1,  width:3.5, height:5, fill:'url(#gGold)'}));
+    svg.appendChild(el('rect', {x:chX-4,      y:chY+off, width:5, height:3.5, fill:'url(#gGold)'}));
+    svg.appendChild(el('rect', {x:chX+chW-1,  y:chY+off, width:5, height:3.5, fill:'url(#gGold)'}));
+  }
+  svg.appendChild(el('rect', {x:chX, y:chY, width:chW, height:chW, rx:5, fill:'url(#gChip)', stroke:'#000'}));
+  svg.appendChild(el('circle', {cx:chX+13, cy:chY+13, r:3, fill:'#555'}));
+  svg.appendChild(el('text', {x:cx, y:chY+40, 'text-anchor':'middle', 'font-size':8, fill:'#9e9e9e', 'font-style':'italic'}, 'WIZnet'));
+  svg.appendChild(el('text', {x:cx, y:chY+56, 'text-anchor':'middle', 'font-size':12, fill:'#ccc', 'font-weight':'bold'}, 'W55RP20'));
+
+  /* RJ45 잭 (하단 대형, 보드 밖으로 돌출) */
+  svg.appendChild(el('rect', {x:cx-75, y:495, width:150, height:148, rx:5, fill:'url(#gMetal)', stroke:'#546e7a', filter:'url(#fShadow)'}));
+  svg.appendChild(el('rect', {x:cx-48, y:560, width:96, height:56, rx:3, fill:'#263238'}));
+  svg.appendChild(el('rect', {x:cx-18, y:604, width:36, height:14, fill:'#37474f'}));
+  svg.appendChild(el('rect', {x:cx-75, y:495, width:150, height:8, fill:'rgba(255,255,255,.25)'}));
+
+  /* 실크스크린 텍스트 (세로) */
+  svg.appendChild(el('text', {x:BX+38, y:420, 'font-size':9, fill:'#fff', 'font-weight':'bold',
+                              transform:'rotate(-90 '+(BX+38)+' 420)'}, 'W55RP20-EVB-Pico'));
+  svg.appendChild(el('text', {x:BX+38, y:540, 'font-size':8, fill:'#fff',
+                              transform:'rotate(-90 '+(BX+38)+' 540)'}, 'Rev 1.0'));
+  svg.appendChild(el('text', {x:BX+BW-36, y:545, 'font-size':8, fill:'#fff',
+                              transform:'rotate(-90 '+(BX+BW-36)+' 545)'}, 'Made by WIZnet'));
+}
+
+function drawRow(svg, def, side){
+  var idx  = def.p;
+  var y    = ROW0 + (side === 'L' ? (idx - 1) : (40 - idx)) * ROWH;
+  var padX = side === 'L' ? PAD_L : PAD_R;
+  var dir  = side === 'L' ? -1 : +1;
+  var g    = el('g', {});
+
+  /* 핀 패드: 실크 박스 + 금도금 스루홀 */
+  g.appendChild(el('rect', {x:padX-10, y:y-10, width:20, height:20, rx:3, fill:'none',
+                            stroke:'rgba(255,255,255,.55)', 'stroke-width':1}));
+  g.appendChild(el('circle', {cx:padX, cy:y, r:7, fill:'url(#gGold)', stroke:'#8d6e63', 'stroke-width':1.2, id:(def.gp != null ? 'pad'+def.gp : '')}));
+  g.appendChild(el('circle', {cx:padX, cy:y, r:2.8, fill:'#33342e'}));
+  g.appendChild(el('text', {x:(side === 'L' ? NUM_L : NUM_R), y:y+3, 'text-anchor':(side === 'L' ? 'end' : 'start'), 'font-size':8, fill:'#777'}, String(idx)));
+
+  var x = side === 'L' ? BOX_L : BOX_R;
+
+  if (def.gp != null){
+    var gp  = def.gp;
+    var rsv = RSV[gp] !== undefined;
+    var gpw = side === 'L' ? GPW_L : GPW_R;
+    /* GP 박스 (동적 — id 부여) */
+    var bx  = side === 'L' ? x - gpw : x;
+    g.appendChild(el('rect', {x:bx, y:y-9, width:gpw, height:18, rx:3, fill:COL.gpio,
+                              opacity:rsv ? 0.45 : 1, stroke:'rgba(0,0,0,.2)', 'stroke-width':0.5, id:'gpbox'+gp}));
+    g.appendChild(el('text', {x:bx+gpw/2, y:y+3.5, 'text-anchor':'middle', 'font-size':9,
+                              fill:'#111', opacity:rsv ? 0.8 : 1, id:'gptxt'+gp}, 'GP'+gp));
+    x += dir * (gpw + 5);
+    /* 기능 배지 (정적) */
+    (def.b || []).forEach(function(b){
+      var w = textW(b[0]);
+      badge(g, side === 'L' ? x - w : x, y, w, b[0], COL[b[1]], DARKTXT[b[1]], rsv);
+      x += dir * (w + 5);
+    });
+    if (rsv){
+      var t = el('title', {}); t.textContent = 'Reserved by firmware: ' + RSV[gp]; g.appendChild(t);
+      g.style.cursor = 'not-allowed';
+    } else {
+      g.style.cursor = 'pointer';
+      g.addEventListener('click', function(){ select(gp); });
+    }
+  } else if (def.t){
+    var w2 = Math.max(textW(def.t), 40);
+    badge(g, side === 'L' ? x - w2 : x, y, w2, def.t, COL[def.k], DARKTXT[def.k]);
+  }
+  svg.appendChild(g);
+}
+
+function buildBoard(){
+  var svg = $('board');
+  drawBoardBody(svg);
+  L.forEach(function(d){ drawRow(svg, d, 'L'); });
+  R.forEach(function(d){ drawRow(svg, d, 'R'); });
+}
+
+/* GP 박스를 현재 상태로 갱신 (색 = 모드, 텍스트 = 값) */
+function paintBoard(){
+  for (var gp in CAPS){
+    var box = $('gpbox'+gp), txt = $('gptxt'+gp), pad = $('pad'+gp);
+    if (!box) continue;
+    var p = S.pins[gp], m = p ? p.m : 'dis';
+    var fill = m === 'dis' ? COL.gpio : MCOLOR[m];
+    box.setAttribute('fill', fill);
+    txt.setAttribute('fill', m === 'dis' ? '#111' : '#fff');
+    var label = 'GP' + gp;
+    if (p){
+      if (m === 'in' || m === 'out') label += '=' + p.v;
+      else if (m === 'adc')          label += '=' + p.v;
+    }
+    txt.textContent = label;
+    var on = Number(gp) === sel;
+    box.setAttribute('stroke', on ? '#ffd600' : 'rgba(0,0,0,.2)');
+    box.setAttribute('stroke-width', on ? 2.5 : 0.5);
+    if (pad){
+      pad.setAttribute('stroke', on ? '#ffd600' : '#8d6e63');
+      pad.setAttribute('stroke-width', on ? 2.5 : 1.2);
+    }
+  }
+}
+
+/*  ---------- 핀 설정 패널 ---------- */
+function select(gp){ sel = gp; paintBoard(); renderPanel(); }
+function curState(){ return S.pins[sel] || {m:'dis'}; }
+
+function renderPanel(){
+  if (sel < 0) return;
+  var p = curState();
+  $('pintitle').textContent = 'GP' + sel + ' — ' + (MLABEL[p.m] || p.m);
+  var h = '<div>';
+  ['dis'].concat(CAPS[sel]).forEach(function(m){
+    h += '<span class="modebtn' + (p.m === m ? ' cur' : '') + '" data-m="' + m + '">' + MLABEL[m] + '</span>';
+  });
+  h += '</div><div id="sub" style="margin-top:12px"></div>';
+  $('pinbody').innerHTML = h;
+  $('pinbody').querySelectorAll('.modebtn').forEach(function(b){
+    b.addEventListener('click', function(){ changeMode(b.getAttribute('data-m')); });
+  });
+  renderSub();
+}
+function changeMode(m){
+  var prm = {gp:sel, mode:m};
+  if (m === 'in')  prm.pull = 'none';
+  if (m === 'out') prm.val = 0;
+  if (m === 'pwm'){ prm.freq = 1000; prm.duty = 50; }
+  setPin(prm);
+}
+function renderSub(){
+  var p = curState(), sub = $('sub'), h = '';
+  if (p.m === 'in'){
+    h = '<div class="rowflex">Pull resistor: <select id="pullsel">' +
+        '<option value="none"' + (p.p === 'none' ? ' selected' : '') + '>None</option>' +
+        '<option value="up"'   + (p.p === 'up'   ? ' selected' : '') + '>Pull-up</option>' +
+        '<option value="down"' + (p.p === 'down' ? ' selected' : '') + '>Pull-down</option></select></div>' +
+        '<div class="statebig">Value: <span id="subval" style="color:' + (p.v ? '#118811' : '#cc2200') + '">' + (p.v ? 'HIGH (1)' : 'LOW (0)') + '</span></div>' +
+        '<p class="muted">Value refreshes automatically.</p>';
+  } else if (p.m === 'out'){
+    h = '<div class="statebig">Output: <span id="subval" style="color:' + (p.v ? '#118811' : '#cc2200') + '">' + (p.v ? 'HIGH' : 'LOW') + '</span></div>' +
+        '<button class="bigbtn hi" id="sethigh">HIGH</button>' +
+        '<button class="bigbtn lo" id="setlow">LOW</button>';
+  } else if (p.m === 'pwm'){
+    h = '<div class="rowflex">Frequency (Hz): <input type="number" id="pwmfreq" min="50" max="10000000" value="' + (p.f || 1000) + '" style="width:110px"></div>' +
+        '<div>Duty: <span id="dutyval">' + (p.d != null ? p.d : 50) + '</span>%' +
+        '<input type="range" id="pwmduty" min="0" max="100" value="' + (p.d != null ? p.d : 50) + '"></div>' +
+        '<button class="bigbtn blue" id="pwmapply">Apply</button>';
+  } else if (p.m === 'adc'){
+    var volts = (p.v * 3.3 / 4095).toFixed(3);
+    h = '<div class="statebig">RAW: <span id="subval">' + p.v + '</span> / 4095</div>' +
+        '<div>Voltage: <span id="subvolt">' + volts + '</span> V</div>' +
+        '<div class="bar"><div id="adcbar" style="width:' + (p.v * 100 / 4095).toFixed(1) + '%"></div></div>' +
+        '<p class="muted">Referenced to 3.3V, auto-refresh.</p>';
+  } else if (p.m !== 'dis'){
+    h = '<p class="muted">Configured as ' + MLABEL[p.m] + '. Use the bus utility panel below.</p>';
+  }
+  sub.innerHTML = h;
+
+  var e;
+  if ((e = $('pullsel')))  e.addEventListener('change', function(){ setPin({gp:sel, mode:'in', pull:e.value}); });
+  if ((e = $('sethigh')))  e.addEventListener('click', function(){ setPin({gp:sel, mode:'out', val:1}); });
+  if ((e = $('setlow')))   e.addEventListener('click', function(){ setPin({gp:sel, mode:'out', val:0}); });
+  if ((e = $('pwmduty')))  e.addEventListener('input', function(){ $('dutyval').textContent = e.value; });
+  if ((e = $('pwmapply'))) e.addEventListener('click', function(){
+    setPin({gp:sel, mode:'pwm', freq:$('pwmfreq').value, duty:$('pwmduty').value});
+  });
+}
+/* 폴링 시 값만 갱신 (입력 포커스 보존) */
+function paintPanelValues(){
+  if (sel < 0) return;
+  var p = curState(), e;
+  if (p.m === 'in' && (e = $('subval'))){
+    e.textContent = p.v ? 'HIGH (1)' : 'LOW (0)';
+    e.style.color = p.v ? '#118811' : '#cc2200';
+  } else if (p.m === 'adc' && (e = $('subval'))){
+    e.textContent = p.v;
+    if ($('subvolt')) $('subvolt').textContent = (p.v * 3.3 / 4095).toFixed(3);
+    if ($('adcbar'))  $('adcbar').style.width = (p.v * 100 / 4095).toFixed(1) + '%';
+  }
+}
+
+/*  ---------- I2C / SPI 패널 ---------- */
+function paintBusButtons(){
+  var bus = Number($('i2cbus').value);
+  var rdy = bus === 0 ? S.i2c0 : S.i2c1;
+  ['i2cscan','i2cread','i2cwrite'].forEach(function(id){ $(id).disabled = !rdy; });
+  $('spixfer').disabled = !S.spi0;
+}
+function hexOk(s){ return /^[0-9a-fA-F]*$/.test(s) && s.length % 2 === 0; }
+
+function initBusPanels(){
+  $('i2cbus').addEventListener('change', paintBusButtons);
+  $('i2cscan').addEventListener('click', function(){
+    $('i2cres').textContent = 'Scanning...';
+    api('/api/i2c', {op:'scan', bus:$('i2cbus').value}).then(function(r){
+      if (!r) return;
+      if (r.err){ $('i2cres').textContent = r.err; return; }
+      $('i2cfound').innerHTML = r.found.length
+        ? r.found.map(function(a){ return '<span class="chip">' + a + '</span>'; }).join('')
+        : '<p class="muted">No devices found</p>';
+      $('i2cres').textContent = r.found.length + ' device(s) found';
+    });
+  });
+  $('i2cread').addEventListener('click', function(){
+    api('/api/i2c', {op:'read', bus:$('i2cbus').value, addr:$('i2caddr').value,
+                     reg:$('i2creg').value, len:$('i2clen').value}).then(function(r){
+      if (r) $('i2cres').textContent = r.err ? r.err : ('RX: ' + r.data);
+    });
+  });
+  $('i2cwrite').addEventListener('click', function(){
+    var d = $('i2cdata').value.trim();
+    if (!hexOk(d) || !d){ toast('Invalid hex data'); return; }
+    api('/api/i2c', {op:'write', bus:$('i2cbus').value, addr:$('i2caddr').value,
+                     reg:$('i2creg').value, data:d}).then(function(r){
+      if (r) $('i2cres').textContent = r.err ? r.err : 'Write OK';
+    });
+  });
+  $('spixfer').addEventListener('click', function(){
+    var d = $('spidata').value.trim();
+    if (!hexOk(d) || !d){ toast('Invalid hex data'); return; }
+    api('/api/spi', {data:d}).then(function(r){
+      if (r) $('spires').textContent = r.err ? r.err : ('RX: ' + r.rx);
+    });
+  });
+}
+
+/*  ---------- 시작 ---------- */
+buildBoard();
+paintBoard();
+initBusPanels();
+api('/api/pins').then(applyState);
+setInterval(function(){ if (!busy) api('/api/pins').then(applyState); }, 1500);
+</script>
+</body>
+</html>

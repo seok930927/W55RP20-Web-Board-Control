@@ -1,0 +1,6 @@
+# Never commit generated keys/certs — regenerate locally (see README.md).
+*.key.pem
+*.cert.pem
+*.csr.pem
+*.der
+*.srl
