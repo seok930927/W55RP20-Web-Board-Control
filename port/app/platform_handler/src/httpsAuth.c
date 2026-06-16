@@ -10,17 +10,6 @@
 #include "task.h"
 #include "WIZ5XXSR-RP_Debug.h"
 
-/*
-    SHA-256("wiznet_w55rp20")
-    = 121dda172818ad50bccb032d865a75531b524ad39dbd2ed9099e966bc418dd76
-*/
-static const uint8_t CREATION_PASS_HASH[HTTPS_HASH_LEN] = {
-    0x12, 0x1d, 0xda, 0x17, 0x28, 0x18, 0xad, 0x50,
-    0xbc, 0xcb, 0x03, 0x2d, 0x86, 0x5a, 0x75, 0x53,
-    0x1b, 0x52, 0x4a, 0xd3, 0x9d, 0xbd, 0x2e, 0xd9,
-    0x09, 0x9e, 0x96, 0x6b, 0xc4, 0x18, 0xdd, 0x76
-};
-
 static https_auth_store_t s_store;
 static https_session_t    s_sessions[HTTPS_MAX_SESSIONS];
 
@@ -82,8 +71,10 @@ int https_auth_account_count(void) {
 
 int https_auth_verify_creation_pass(const char *pass) {
     uint8_t hash[HTTPS_HASH_LEN];
+    uint8_t ref[HTTPS_HASH_LEN];
     sha256_str(pass, hash);
-    return (memcmp(hash, CREATION_PASS_HASH, HTTPS_HASH_LEN) == 0) ? 1 : 0;
+    sha256_str(HTTPS_CREATION_PASSWORD, ref);
+    return (memcmp(hash, ref, HTTPS_HASH_LEN) == 0) ? 1 : 0;
 }
 
 int https_auth_create_account(const char *user, const char *pass) {

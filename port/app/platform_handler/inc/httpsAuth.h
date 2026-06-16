@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+/*  Account-creation password.
+    Required on /setup and /account to create a new user account.
+    To change it, just edit this string and rebuild — it is hashed with
+    SHA-256 at runtime, so no precomputed hash needs to be updated.        */
+#define HTTPS_CREATION_PASSWORD   "w55rp20"
+
 #define HTTPS_MAX_ACCOUNTS        5
 #define HTTPS_USER_LEN            32
 #define HTTPS_HASH_LEN            32   /* SHA-256 */

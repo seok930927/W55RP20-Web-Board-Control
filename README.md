@@ -64,9 +64,11 @@ across three W5500 sockets (up to three concurrent connections).
 ### Account creation password
 
 Creating accounts requires a separate creation password (demo default:
-`wiznet_w55rp20`), stored as a SHA-256 hash in the firmware. **Change this for
-any real use** — see `https_auth_verify_creation_pass()` in
-[`httpsAuth.c`](port/app/platform_handler/src/httpsAuth.c).
+`w55rp20`). To change it, edit a single string —
+`HTTPS_CREATION_PASSWORD` in
+[`httpsAuth.h`](port/app/platform_handler/inc/httpsAuth.h) — and rebuild. It is
+hashed with SHA-256 at runtime, so there is no precomputed hash to update.
+**Change this for any real use.**
 
 ---
 
